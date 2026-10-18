@@ -1,14 +1,11 @@
 require('dotenv').config();
+const fs = require('fs');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 
 puppeteer.use(StealthPlugin());
 
-// Variables extraction from .env
-const SITE_URL = process.env.SITE_URL;
-const USER_EMAIL = process.env.USER_EMAIL;
-const USER_PASSWORD = process.env.USER_PASSWORD;
-const AFK_PAGE_URL = process.env.AFK_PAGE_URL || SITE_URL;
+const AFK_PAGE_URL = process.env.AFK_PAGE_URL || 'https://dash.pingless.org/afk';
 const REFRESH_INTERVAL = (process.env.REFRESH_INTERVAL_MINUTES || 15) * 60 * 1000;
 
 function wait(ms) {
@@ -16,15 +13,15 @@ function wait(ms) {
 }
 
 async function startBot() {
-    console.log("🚀 Starting Pingless Human-Like AFK Bot...");
+    console.log("🚀 Starting Cookie-Based AFK Bot...");
 
-    if (!USER_EMAIL || !USER_PASSWORD) {
-        console.log("❌ Error: Email or Password missing in environment variables!");
+    if (!fs.existsSync('./cookies.json')) {
+        console.log("❌ Error: 'cookies.json' file not found! Please export cookies from your browser after logging in.");
         return;
     }
 
     const browser = await puppeteer.launch({
-        headless: false, // Background mein chalana ho toh true kar dena
+        headless: false, // Render ya server par chalaane ke liye ise 'true' kar dena
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--start-maximized']
     });
 
@@ -32,64 +29,35 @@ async function startBot() {
     await page.setViewport({ width: 1366, height: 768 });
 
     try {
-        // 1. Login Page Open karo
-        console.log(`🌐 Opening Login Page: ${SITE_URL}`);
-        await page.goto(SITE_URL, { waitUntil: 'networkidle2' });
-        await wait(4000);
+        // 1. Load Cookies
+        console.log("🍪 Loading session cookies...");
+        const cookiesString = fs.readFileSync('./cookies.json', 'utf8');
+        const cookies = JSON.parse(cookiesString);
+        await page.setCookie(...cookies);
 
-        // 2. Human-like Email Typing (WordPress/Custom forms ke standard selectors: #user_login, #email, etc.)
-        console.log("⌨️ Entering Email/Username...");
-        await page.waitForSelector('#user_login, #email, input[type="text"]', { timeout: 10000 });
-        await page.type('#user_login, #email, input[type="text"]', USER_EMAIL, { delay: 100 });
-        await wait(1500);
-
-        // 3. Human-like Password Typing
-        console.log("🔑 Entering Password...");
-        await page.waitForSelector('#user_pass, #password, input[type="password"]', { timeout: 10000 });
-        await page.type('#user_pass, #password, input[type="password"]', USER_PASSWORD, { delay: 110 });
-        await wait(2000);
-
-        // 4. Natural Mouse movement before clicking submit
-        console.log("🖱️ Simulating human mouse movement...");
-        await page.mouse.move(120, 250);
-        await wait(600);
-        await page.mouse.move(340, 420);
-        await wait(1000);
-
-        // 5. Click Login / Submit Button
-        console.log("🖱️ Clicking Submit/Login Button...");
-        await Promise.all([
-            page.click('#wp-submit, #login-btn, button[type="submit"]'),
-            page.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {})
-        ]);
+        // 2. Direct Go to AFK Page
+        console.log(`🌐 Navigating directly to: ${AFK_PAGE_URL}`);
+        await page.goto(AFK_PAGE_URL, { waitUntil: 'networkidle2' });
         await wait(5000);
-        console.log("✅ Login Process Completed!");
 
-        // 6. Navigate to AFK Page Dashboard
-        if (AFK_PAGE_URL !== SITE_URL) {
-            console.log(`🌐 Navigating to AFK Dashboard: ${AFK_PAGE_URL}`);
-            await page.goto(AFK_PAGE_URL, { waitUntil: 'networkidle2' });
-            await wait(4000);
-        }
+        console.log("✅ Successfully logged in via cookies and reached AFK page!");
 
-        // 7. Continuous AFK Refresh Loop (Har 10-15 minute mein page refresh)
-        console.log(`🔄 AFK & Refresh Loop started (Refreshing every ${process.env.REFRESH_INTERVAL_MINUTES || 15} minutes)...`);
+        // 3. AFK & Refresh Loop
+        console.log(`🔄 AFK refresh loop running every ${process.env.REFRESH_INTERVAL_MINUTES || 15} minutes...`);
         
         setInterval(async () => {
             try {
-                console.log(`[${new Date().toLocaleTimeString()}] 🔄 Refreshing page to maintain AFK status...`);
+                console.log(`[${new Date().toLocaleTimeString()}] 🔄 Refreshing page to maintain AFK...`);
                 await page.reload({ waitUntil: 'networkidle2' });
-                await wait(5000);
-
-                // Optional: Yahan agar koi specific element ya button click karna ho toh check kar sakte hain
-                console.log("✅ Page refreshed successfully, AFK active.");
+                await wait(4000);
+                console.log("✅ Page refreshed successfully!");
             } catch (err) {
-                console.log("❌ Error during refresh loop:", err.message);
+                console.log("❌ Refresh error:", err.message);
             }
         }, REFRESH_INTERVAL);
 
     } catch (error) {
-        console.log("❌ Fatal Automation Error:", error);
+        console.log("❌ Fatal Error:", error);
     }
 }
 
